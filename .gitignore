@@ -1,0 +1,64 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.venv*/
+env*/
+.conda/
+conda_env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Logs and outputs
+*.log
+logs/
+*.out
+*.err
+
+# Model checkpoints and weights
+*.h5
+*.hdf5
+*.ckpt
+*.pb
+*.tflite
+checkpoints/
+models/
+saved_models/
+
+# TensorBoard logs
+runs/
+tensorboard/
+tb_logs/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Python environment configs
+*.env
+.env.*
+.envrc
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE / Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+
+# Matplotlib, cache, etc.
+__pycache__/
+.cache/
+*.matplotlib/
