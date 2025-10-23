@@ -2,131 +2,99 @@ import pandas as pd
 from text_processing import clean_text, tokenize_text, text_to_sequences, add_special_tokens, build_vocabulary
 from dataset_prep import prepare_dataset
 import numpy as np
+from get_max_len import get_optimal_max_length, analyze_sequence_lengths
 
 
 def preprocessing_pipeline():
+
     print('Loading and splitting dataset')
     dataset_splits = prepare_dataset()
+
     X_train, y_train = dataset_splits['train']
     X_val, y_val = dataset_splits['val']
     X_test, y_test = dataset_splits['test']
 
-    # preparing the training data
-    print('Preparing training data')
-    print('Cleaning English texts')
-    cleaned_english_texts = [clean_text(text) for text in X_train]
-    clean_gloss = [str(text).strip() for text in y_train]
+    all_english_texts = X_train + X_val + X_test
+    all_gloss_texts = y_train + y_val + y_test
 
-    print('Creating tokenizers')
-    # english
-    eng_tokenizer = tokenize_text(cleaned_english_texts, lower=True)
-    # gloss
-    gloss_with_tokens = add_special_tokens(clean_gloss)
+    eng_lengths, gloss_lengths, all_lengths = analyze_sequence_lengths(all_english_texts, all_gloss_texts)
+    max_len = get_optimal_max_length(all_english_texts, all_gloss_texts, coverage=0.95, buffer=2)
+
+    cleaned_all_english_texts = [clean_text(text) for text in all_english_texts]
+    clean_all_gloss = [str(text).strip() for text in all_gloss_texts]
+
+    eng_tokenizer = tokenize_text(cleaned_all_english_texts, lower=True)
+    gloss_with_tokens = add_special_tokens(clean_all_gloss)
     gloss_tokenizer = tokenize_text(gloss_with_tokens, lower=False)
 
-    eng_vocab_size = len(eng_tokenizer.word_index) + 1
-    gloss_vocab_size = len(gloss_tokenizer.word_index) + 1
+    # english text processing
+    
+    # training data
+    train_eng_text = [clean_text(text) for text in X_train]
+    encoder_input_train = text_to_sequences(eng_tokenizer, train_eng_text, max_len=max_len)
 
-    print('Converting texts to sequences')
-    # english
-    encoder_input_sequences = text_to_sequences(eng_tokenizer, cleaned_english_texts)
-    # gloss
-    decoder_input_sequences = text_to_sequences(gloss_tokenizer, gloss_with_tokens)
+    # validation data
+    val_eng_text = [clean_text(text) for text in X_val]
+    encoder_input_val = text_to_sequences(eng_tokenizer, val_eng_text, max_len=max_len)
 
-    # create decoder target sequences
-    decoder_target = np.zeros_like(decoder_input_sequences)
-    decoder_target[:, :-1] = decoder_input_sequences[:, 1:]
+    # test data
+    test_eng_text = [clean_text(text) for text in X_test]
+    encoder_input_test = text_to_sequences(eng_tokenizer, test_eng_text, max_len=max_len)
 
-    # preparing the testing data
-    print('Preparing testing data')
-    print('Cleaning English texts')
-    cleaned_english_texts_test = [clean_text(text) for text in X_test]
-    clean_gloss_test = [str(text).strip() for text in y_test]
+    # gloss text processing
+    
+    # training data
+    train_gloss_text = [str(text).strip() for text in y_train]
+    train_gloss_with_tokens = add_special_tokens(train_gloss_text)  
+    decoder_input_train = text_to_sequences(gloss_tokenizer, train_gloss_with_tokens, max_len=max_len)
 
-    print('Creating tokenizers')
-    # english
-    eng_tokenizer_test = tokenize_text(cleaned_english_texts_test, lower=True)
-    # gloss
-    gloss_with_tokens_test = add_special_tokens(clean_gloss_test)
-    gloss_tokenizer_test = tokenize_text(gloss_with_tokens_test, lower=False)
+    decoder_target_train = np.zeros_like(decoder_input_train)
+    decoder_target_train[:, :-1] = decoder_input_train[:, 1:]  
 
-    # eng_vocab_size = len(eng_tokenizer_test.word_index) + 1
-    # gloss_vocab_size = len(gloss_tokenizer_test.word_index) + 1
+    # Validation data  
+    val_gloss_text = [str(text).strip() for text in y_val]
+    val_gloss_with_tokens = add_special_tokens(val_gloss_text) 
+    decoder_input_val = text_to_sequences(gloss_tokenizer, val_gloss_with_tokens, max_len=max_len)
+    
+    decoder_target_val = np.zeros_like(decoder_input_val)
+    decoder_target_val[:, :-1] = decoder_input_val[:, 1:] 
 
-    print('Converting texts to sequences')
-    # english
-    encoder_input_sequences_test = text_to_sequences(eng_tokenizer_test, cleaned_english_texts_test)
-    # gloss
-    decoder_input_sequences_test = text_to_sequences(gloss_tokenizer_test, gloss_with_tokens_test)
-
-    # create decoder target sequences
-    decoder_target_test = np.zeros_like(decoder_input_sequences_test)
-    decoder_target_test[:, :-1] = decoder_input_sequences_test[:, 1:]
-
-    # preparing the validation data
-    print('Preparing validation data')
-    print('Cleaning English texts')
-    cleaned_english_texts_val = [clean_text(text) for text in X_val]
-    clean_gloss_val = [str(text).strip() for text in y_val]
-
-    print('Creating tokenizers')
-    # english
-    eng_tokenizer_val = tokenize_text(cleaned_english_texts_val, lower=True)
-    # gloss
-    gloss_with_tokens_val = add_special_tokens(clean_gloss_val)
-    gloss_tokenizer_val = tokenize_text(gloss_with_tokens_val, lower=False)
-
-    # eng_vocab_size = len(eng_tokenizer_val.word_index) + 1
-    # gloss_vocab_size = len(gloss_tokenizer_val.word_index) + 1
-
-    print('Converting texts to sequences')
-    # english
-    encoder_input_sequences_val = text_to_sequences(eng_tokenizer_val, cleaned_english_texts_val)
-    # gloss
-    decoder_input_sequences_val = text_to_sequences(gloss_tokenizer_val, gloss_with_tokens_val)
-
-    # create decoder target sequences
-    decoder_target_val = np.zeros_like(decoder_input_sequences_val)
-    decoder_target_val[:, :-1] = decoder_input_sequences_val[:, 1:]
-
-    print('Data preprocessing completed')
-    print(f'   Training examples: {len(encoder_input_sequences)}')
-    print(f'   Validation examples: {len(encoder_input_sequences_val)}')
-    print(f'   English vocab size: {eng_vocab_size}')
-    print(f'   Gloss vocab size: {gloss_vocab_size}')
+    # Test data
+    test_gloss_text = [str(text).strip() for text in y_test]
+    test_gloss_with_tokens = add_special_tokens(test_gloss_text) 
+    decoder_input_test = text_to_sequences(gloss_tokenizer, test_gloss_with_tokens, max_len=max_len)
+    
+    decoder_target_test = np.zeros_like(decoder_input_test)
+    decoder_target_test[:, :-1] = decoder_input_test[:, 1:]
 
     return {
         # Training data
-        'train_encoder_inputs': encoder_input_sequences,
-        'train_decoder_inputs': decoder_input_sequences,
-        'train_decoder_targets': decoder_target,
+        'train_encoder_inputs': encoder_input_train,
+        'train_decoder_inputs': decoder_input_train,
+        'train_decoder_targets': decoder_target_train,
 
         # Validation data
-        'val_encoder_inputs': encoder_input_sequences_val,
-        'val_decoder_inputs': decoder_input_sequences_val,
+        'val_encoder_inputs': encoder_input_val,
+        'val_decoder_inputs': decoder_input_val,
         'val_decoder_targets': decoder_target_val,
 
-        # Testing data
-        'test_encoder_inputs': encoder_input_sequences_test,
-        'test_decoder_inputs': decoder_input_sequences_test,
+        # Test data
+        'test_encoder_inputs': encoder_input_test,
+        'test_decoder_inputs': decoder_input_test,
         'test_decoder_targets': decoder_target_test,
 
         # Tokenizers
         'eng_tokenizer': eng_tokenizer,
         'gloss_tokenizer': gloss_tokenizer,
-        'eng_tokenizer_test': eng_tokenizer_test,
-        'gloss_tokenizer_test': gloss_tokenizer_test,
-        'eng_tokenizer_val': eng_tokenizer_val,
-        'gloss_tokenizer_val': gloss_tokenizer_val,
 
         # Vocab sizes
-        'eng_vocab_size': eng_vocab_size,
-        'gloss_vocab_size': gloss_vocab_size,
-        'max_length': 25,
+        'eng_vocab_size': len(eng_tokenizer.word_index) + 1,
+        'gloss_vocab_size': len(gloss_tokenizer.word_index) + 1,
+        'max_length': max_len,
         
-        # raw test data
+        # Raw data for reference
         'raw_test': (X_test, y_test)
-    }
+    }    
 
 
 
