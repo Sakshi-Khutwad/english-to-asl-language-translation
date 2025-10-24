@@ -3,35 +3,6 @@ from model2 import build_seq2seq_model, train_model
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-# Check for GPU availability
-gpus = tf.config.list_physical_devices('GPU')
-if gpus:
-    try:
-        # Allow TensorFlow to allocate GPU memory as needed
-        # for gpu in gpus:
-        #     tf.config.experimental.set_memory_growth(gpu, True)
-        
-        # (Optional) Use only specific GPU if multiple available
-        tf.config.set_visible_devices(gpus[1], 'GPU')
-
-        logical_gpus = tf.config.list_logical_devices('GPU')
-        print(f"✅ {len(gpus)} Physical GPU(s), {len(logical_gpus)} Logical GPU(s) available.")
-        print("TensorFlow will use GPU for computation.")
-
-        # Log device placement (to confirm ops are on GPU)
-        tf.debugging.set_log_device_placement(True)
-
-        # Enable mixed precision for faster training (if supported)
-        from tensorflow.keras import mixed_precision
-        mixed_precision.set_global_policy('mixed_float16')
-        print("🚀 Mixed precision enabled for faster GPU training.")
-
-    except RuntimeError as e:
-        print(f"⚠️ GPU setup error: {e}")
-else:
-    print("❌ No GPU detected — TensorFlow will use CPU.")
-
-
 def main():
     print('Starting the ASL Translation Pipeline')
     processed_data = preprocessing_pipeline()
