@@ -8,11 +8,11 @@ gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     try:
         # Allow TensorFlow to allocate GPU memory as needed
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
+        # for gpu in gpus:
+        #     tf.config.experimental.set_memory_growth(gpu, True)
         
         # (Optional) Use only specific GPU if multiple available
-        # tf.config.set_visible_devices(gpus[0], 'GPU')
+        tf.config.set_visible_devices(gpus[1], 'GPU')
 
         logical_gpus = tf.config.list_logical_devices('GPU')
         print(f"✅ {len(gpus)} Physical GPU(s), {len(logical_gpus)} Logical GPU(s) available.")
@@ -42,7 +42,7 @@ def main():
         max_length=processed_data['max_length']
     )
 
-    history = train_model(model, processed_data, epochs=35, batch_size=32)
+    history = train_model(model, processed_data, epochs=35, batch_size=64)
 
     print('model training completed')
     model.save('asl_translation_model.h5')
