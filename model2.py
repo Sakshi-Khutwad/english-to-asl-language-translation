@@ -137,7 +137,7 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
 
     return model
 
-def train_model(model, processed_data, epochs=100, batch_size=32):
+def train_model(model, processed_data, epochs=35, batch_size=32):
     print('Starting model training with anti-overfitting measures')
 
     # Reshape targets
