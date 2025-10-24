@@ -1,6 +1,11 @@
 from pipeline import preprocessing_pipeline
 from model import build_seq2seq_model, train_model
 import matplotlib.pyplot as plt
+import tensorflow as tf
+print("🧠 TensorFlow version:", tf.__version__)
+print("📦 Keras version:", tf.keras.__version__)
+print("🔍 Available GPUs:", tf.config.list_physical_devices('GPU'))
+
 
 def main():
     print('Starting the ASL Translation Pipeline')

@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 import os
 
 current_dir = os.getcwd()
-data_path = os.path.join(current_dir, 'aslg_pc12.csv')
+data_path = os.path.join(current_dir, 'train.csv')
 
 df = pd.read_csv(data_path)
 

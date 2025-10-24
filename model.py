@@ -50,21 +50,22 @@ def train_model(model, processed_data, epochs=50, batch_size=32):
             processed_data['train_decoder_targets'].shape[1],
             1
     )
-
-    history = model.fit(
-        [processed_data['train_encoder_inputs'], processed_data['train_decoder_inputs']],
-        y_train_reshaped,
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_data=(
-            [processed_data['val_encoder_inputs'], processed_data['val_decoder_inputs']],
-            processed_data['val_decoder_targets'].reshape(
-                processed_data['val_decoder_targets'].shape[0],
-                processed_data['val_decoder_targets'].shape[1],
-                1
-            )
-        ),
-        verbose=1
-    )
+    
+    with tf.device('/GPU:0'):  # 👈 Force GPU
+        history = model.fit(
+            [processed_data['train_encoder_inputs'], processed_data['train_decoder_inputs']],
+            y_train_reshaped,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(
+                [processed_data['val_encoder_inputs'], processed_data['val_decoder_inputs']],
+                processed_data['val_decoder_targets'].reshape(
+                    processed_data['val_decoder_targets'].shape[0],
+                    processed_data['val_decoder_targets'].shape[1],
+                    1
+                )
+            ),
+            verbose=1
+        )
     return history
 
