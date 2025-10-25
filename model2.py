@@ -124,7 +124,7 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
         name='asl_seq2seq_improved'
     )
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.0025)
     
     model.compile(
         optimizer=optimizer, 
