@@ -67,6 +67,14 @@ def preprocessing_pipeline():
     decoder_target_test = np.zeros_like(decoder_input_test)
     decoder_target_test[:, :-1] = decoder_input_test[:, 1:]
 
+    print('Eng Vocabulary size: ', len(eng_tokenizer.word_index) + 1)
+    print('Gloss Vocabulary size: ', len(gloss_tokenizer.word_index) + 1)
+    print('Max len: ', max_len)
+    
+    print('Train dataset length: ', len(X_train))
+    print('Validation dataset length: ', len(X_val))
+    print('Test dataset length: ', len(X_test))
+
     return {
         # Training data
         'train_encoder_inputs': encoder_input_train,

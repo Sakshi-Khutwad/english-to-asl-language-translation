@@ -7,19 +7,19 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_dim=128):
     print('Building Improved seq2seq model with Bidirectional LSTM & Regularization')
 
-    # ==================== ENCODER ====================
+    # Encoder
     encoder_inputs = Input(shape=(max_length,), name='encoder_input')
     
-    # Encoder embedding with regularization
+    # embedding layer
     encoder_embedding = Embedding(
         eng_vocab_size, 
         embedding_dim, 
         mask_zero=True,  # Ignore padding
-        embeddings_regularizer=l2(1e-4),  # L2 regularization
+        embeddings_regularizer=l2(1e-4), # 0.0001
         name='encoder_embedding'
     )(encoder_inputs)
     
-    # Add dropout to embedding layer
+    # dropout to embedding layer with 0.3 dropout probability
     encoder_embedding = Dropout(0.3)(encoder_embedding)
 
     # First Bidirectional LSTM with regularization
@@ -51,9 +51,11 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
             name='encoder_bilstm2'
         )
     )
+
+    # hidden state (h) and cell state (c) carries the information from one time step to the next
     encoder_outputs, forward_h, forward_c, backward_h, backward_c = encoder_bilstm2(encoder_output1)
 
-    # Combine forward and backward states
+    # Combining forward and backward states
     encoder_state_h = Concatenate()([forward_h, backward_h])
     encoder_state_c = Concatenate()([forward_c, backward_c])
     encoder_states = [encoder_state_h, encoder_state_c]
@@ -75,7 +77,7 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
     
     # First Decoder LSTM - needs 256 units to match bidirectional encoder output (2*128)
     decoder_lstm1 = LSTM(
-        256,  # Matches encoder output size (2 * 128)
+        256,
         return_sequences=True, 
         return_state=True,
         dropout=0.3,
@@ -109,22 +111,20 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
         Dense(
             gloss_vocab_size, 
             activation='softmax',
-            kernel_regularizer=l2(1e-3),  # Stronger regularization on output
+            kernel_regularizer=l2(1e-3), # more strong regularization on the output
             bias_regularizer=l2(1e-3),
             name='output'
         )
     )
     decoder_outputs = decoder_dense(decoder_outputs)
 
-    # Model
     model = Model(
         inputs=[encoder_inputs, decoder_inputs],
         outputs=decoder_outputs,
         name='asl_seq2seq_improved'
     )
 
-    # Use Adam with lower learning rate for better convergence
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.005)
     
     model.compile(
         optimizer=optimizer, 
@@ -155,10 +155,9 @@ def train_model(model, processed_data, epochs=35, batch_size=64):
 
     # Anti-overfitting callbacks
     callbacks = [
-        # Early stopping to prevent overfitting
         EarlyStopping(
             monitor='val_loss',
-            patience=10,  # Stop after 10 epochs without improvement
+            patience=15,  # Stop after 15 epochs without improvement
             restore_best_weights=True,  # Keep the best weights
             verbose=1
         ),
@@ -167,10 +166,10 @@ def train_model(model, processed_data, epochs=35, batch_size=64):
         ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.5,    # Reduce LR by half
-            patience=5,    # After 5 epochs without improvement
-            min_lr=1e-7,   # Minimum learning rate
+            patience=8,    # After 8 epochs without improvement
+            min_lr=1e-6,   # Minimum learning rate
             verbose=1
-        )
+        ),
     ]
 
     history = model.fit(

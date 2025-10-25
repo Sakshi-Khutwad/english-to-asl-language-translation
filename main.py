@@ -13,30 +13,30 @@ def main():
         max_length=processed_data['max_length']
     )
 
-    history = train_model(model, processed_data, epochs=35, batch_size=64)
+    # history = train_model(model, processed_data, epochs=25, batch_size=64)
 
-    print('model training completed')
-    model.save('asl_translation_model.h5')
+    # print('model training completed')
+    # model.save('asl_translation_model.h5')
 
-    plt.figure(figsize=(12, 4))
+    # plt.figure(figsize=(12, 4))
 
-    plt.subplot(1, 2, 1)
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.title('Model Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
+    # plt.subplot(1, 2, 1)
+    # plt.plot(history.history['loss'], label='Training Loss')
+    # plt.plot(history.history['val_loss'], label='Validation Loss')
+    # plt.title('Model Loss')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Loss')
+    # plt.legend()
 
-    plt.subplot(1, 2, 2)
-    plt.plot(history.history['accuracy'], label='Training Accuracy')
-    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Model Accuracy')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
+    # plt.subplot(1, 2, 2)
+    # plt.plot(history.history['accuracy'], label='Training Accuracy')
+    # plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    # plt.title('Model Accuracy')
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Accuracy')
+    # plt.legend()
 
-    plt.show()
+    # plt.show()
 
     return model, processed_data
 
