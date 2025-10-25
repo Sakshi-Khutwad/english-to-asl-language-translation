@@ -14,7 +14,7 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
     encoder_embedding = Embedding(
         eng_vocab_size, 
         embedding_dim, 
-        mask_zero=True,  # Ignore padding
+        # mask_zero=True,  # Ignore padding
         embeddings_regularizer=l2(1e-4), # 0.0001
         name='encoder_embedding'
     )(encoder_inputs)
@@ -67,7 +67,7 @@ def build_seq2seq_model(eng_vocab_size, gloss_vocab_size, max_length, embedding_
     decoder_embedding = Embedding(
         gloss_vocab_size, 
         embedding_dim, 
-        mask_zero=True,
+        # mask_zero=True,
         embeddings_regularizer=l2(1e-4),
         name='decoder_embedding'
     )(decoder_inputs)
