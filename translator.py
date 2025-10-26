@@ -7,7 +7,7 @@ import os
 from text_processing import clean_text, text_to_sequences
 from pipeline import preprocessing_pipeline
 
-class FixedASLTranslator:
+class NeuralASLTranslator:
     def __init__(self, model_path):
         print("🚀 Loading model and data...")
         self.model = load_model(model_path)
@@ -29,17 +29,17 @@ class FixedASLTranslator:
         self.reverse_eng = {v: k for k, v in self.eng_tokenizer.word_index.items()}
         self.reverse_gloss = {v: k for k, v in self.gloss_tokenizer.word_index.items()}
     
-    def diagnose_model_issue(self):
-        """Diagnose why the model is failing"""
-        print("\n🔍 DIAGNOSING MODEL ISSUE")
+    def analyze_model_performance(self):
+        """Analyze model performance on training data"""
+        print("\n🔍 ANALYZING MODEL PERFORMANCE")
         print("=" * 50)
         
         # Test on training data itself
-        train_encoder = self.processed_data['train_encoder_inputs'][:2]
-        train_decoder = self.processed_data['train_decoder_inputs'][:2]
-        train_targets = self.processed_data['train_decoder_targets'][:2]
+        train_encoder = self.processed_data['train_encoder_inputs'][:3]
+        train_decoder = self.processed_data['train_decoder_inputs'][:3]
+        train_targets = self.processed_data['train_decoder_targets'][:3]
         
-        for i in range(2):
+        for i in range(3):
             print(f"\nTraining Example {i}:")
             
             # Show actual training pair
@@ -55,217 +55,231 @@ class FixedASLTranslator:
             
             predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
             
-            # Check if model can even predict training data
+            # Analyze prediction quality
             pred_tokens = []
-            for step in range(min(5, predictions.shape[1])):
+            confidence_scores = []
+            
+            for step in range(min(8, predictions.shape[1])):
                 token = np.argmax(predictions[0, step, :])
                 prob = predictions[0, step, token]
                 word = self.reverse_gloss.get(token, f'?{token}?')
+                
                 if word not in ['<start>', '<end>', '<pad>']:
-                    pred_tokens.append((word, prob))
+                    pred_tokens.append(word)
+                    confidence_scores.append(prob)
             
-            print(f"  Model prediction: {pred_tokens}")
-            
-            # Check if probabilities are reasonable
-            avg_prob = np.mean([prob for _, prob in pred_tokens])
-            print(f"  Average probability: {avg_prob:.4f}")
-            
-            if avg_prob < 0.1:
-                print("  ❌ MODEL IS BROKEN - Probabilities too low!")
+            print(f"  Model prediction: {' '.join(pred_tokens)}")
+            print(f"  Confidence: {np.mean(confidence_scores):.4f}")
     
-    def create_simple_translator(self):
-        """Create a simple rule-based translator as fallback"""
-        print("\n🔄 Creating simple rule-based translator...")
-        
-        # Common word mappings (you can expand this)
-        word_mapping = {
-            'hello': 'HELLO',
-            'hi': 'HI', 
-            'you': 'YOU',
-            'thank': 'THANK',
-            'thanks': 'THANK',
-            'what': 'WHAT',
-            'name': 'NAME',
-            'how': 'HOW',
-            'are': 'ARE',
-            'where': 'WHERE',
-            'bathroom': 'BATHROOM',
-            'please': 'PLEASE',
-            'sorry': 'SORRY',
-            'good': 'GOOD',
-            'morning': 'MORNING',
-            'night': 'NIGHT'
-        }
-        
-        def simple_translate(sentence):
-            words = sentence.lower().split()
-            translated = []
-            for word in words:
-                if word in word_mapping:
-                    translated.append(word_mapping[word])
-                else:
-                    # Try to find similar words
-                    found = False
-                    for key, value in word_mapping.items():
-                        if key in word or word in key:
-                            translated.append(value)
-                            found = True
-                            break
-                    if not found:
-                        translated.append(word.upper())
-            return ' '.join(translated)
-        
-        return simple_translate
-    
-    def translate_with_fallback(self, english_sentence):
+    def translate(self, english_sentence, max_output_length=10, min_confidence=0.1):
         """
-        Try neural translation first, fall back to rule-based if it fails
+        Pure neural translation without any rule-based fallback
         """
         print(f"\n🎯 Translating: '{english_sentence}'")
         
-        # First try neural translation
-        neural_result = self._try_neural_translation(english_sentence)
-        
-        if neural_result and neural_result != "<NO OUTPUT>" and not all(word == '<UNK>' for word in neural_result.split()):
-            print(f"🤖 Neural: {neural_result}")
-            return neural_result
-        else:
-            # Fall back to rule-based
-            simple_translator = self.create_simple_translator()
-            rule_result = simple_translator(english_sentence)
-            print(f"📝 Rule-based: {rule_result}")
-            return rule_result
-    
-    def _try_neural_translation(self, english_sentence):
-        """Try neural translation with aggressive filtering"""
         try:
             # Preprocess input
             cleaned = clean_text(english_sentence)
             encoder_input = text_to_sequences(self.eng_tokenizer, [cleaned], max_len=self.max_length)
             
-            # Start with SOS
+            # Initialize decoder with SOS token
             decoder_input = np.zeros((1, self.max_length))
             decoder_input[0, 0] = self.SOS_TOKEN
             
             predicted_tokens = []
+            confidence_scores = []
             
-            for step in range(min(8, self.max_length)):  # Limit steps
+            for step in range(min(max_output_length, self.max_length)):
                 predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
                 current_probs = predictions[0, step, :]
                 
-                # Get top 10 predictions
-                top_tokens = np.argsort(current_probs)[-10:][::-1]
+                # Get top prediction
+                top_token = np.argmax(current_probs)
+                top_prob = current_probs[top_token]
+                top_word = self.reverse_gloss.get(top_token, '<UNK>')
                 
-                chosen_token = None
-                chosen_word = None
-                chosen_prob = 0
-                
-                # Aggressive filtering
-                for token in top_tokens:
-                    word = self.reverse_gloss.get(token, '<UNK>')
-                    prob = current_probs[token]
-                    
-                    # Only accept reasonable predictions
-                    if (prob > 0.1 and  # Minimum confidence
-                        token != self.EOS_TOKEN and
-                        token != self.SOS_TOKEN and 
-                        token != self.UNK_TOKEN and
-                        word not in ['<start>', '<end>', '<pad>', '<unk>'] and
-                        len(word) > 1 and  # Avoid single characters
-                        not word.startswith('DESC-') and  # Avoid descriptor tokens
-                        not word.startswith('X-')):  # Avoid pronoun markers
-                        
-                        chosen_token = token
-                        chosen_word = word
-                        chosen_prob = prob
-                        break
-                
-                if chosen_token is None:
-                    # If no good token, try less strict criteria
-                    for token in top_tokens:
-                        word = self.reverse_gloss.get(token, '<UNK>')
-                        prob = current_probs[token]
-                        
-                        if (prob > 0.05 and
-                            token != self.EOS_TOKEN and
-                            word not in ['<start>', '<end>', '<pad>']):
-                            
-                            chosen_token = token
-                            chosen_word = word
-                            chosen_prob = prob
-                            break
-                
-                if chosen_token is None:
+                # Stop conditions
+                if (top_token == self.EOS_TOKEN or 
+                    top_word in ['<end>', '<pad>'] or
+                    step >= max_output_length - 1):
                     break
-                    
-                print(f"  Step {step}: '{chosen_word}' (prob: {chosen_prob:.4f})")
                 
-                # Stop if we have reasonable output
-                if len(predicted_tokens) >= 3:  # Don't generate too long
+                # Only add if confidence is sufficient and not special tokens
+                if (top_prob >= min_confidence and 
+                    top_token != self.SOS_TOKEN and 
+                    top_word not in ['<start>', '<unk>'] and
+                    not top_word.startswith('DESC-') and
+                    not top_word.startswith('X-')):
+                    
+                    predicted_tokens.append(top_token)
+                    confidence_scores.append(top_prob)
+                    
+                    print(f"  Step {step}: '{top_word}' (prob: {top_prob:.4f})")
+                    
+                    # Update decoder input for next step
+                    if step + 1 < self.max_length:
+                        decoder_input[0, step + 1] = top_token
+                
+                elif top_prob < min_confidence:
+                    print(f"  Step {step}: Low confidence ({top_prob:.4f}), stopping")
                     break
-                    
-                predicted_tokens.append(chosen_token)
-                
-                # Update decoder
-                if step + 1 < self.max_length:
-                    decoder_input[0, step + 1] = chosen_token
             
-            # Convert to text
+            # Convert tokens to words
             words = []
             for token in predicted_tokens:
-                word = self.reverse_gloss.get(token, '<UNK>')
-                if word not in ['<start>', '<end>', '<pad>', '<unk>']:
+                word = self.reverse_gloss.get(token, '')
+                if word and word not in ['<start>', '<end>', '<pad>', '<unk>']:
                     words.append(word)
             
-            result = ' '.join(words) if words else "<NO OUTPUT>"
-            return result
+            result = ' '.join(words) if words else "<NO CONFIDENT PREDICTION>"
+            avg_confidence = np.mean(confidence_scores) if confidence_scores else 0
+            
+            print(f"🤖 Neural Translation: {result}")
+            print(f"📊 Average Confidence: {avg_confidence:.4f}")
+            
+            return result, avg_confidence
             
         except Exception as e:
-            print(f"❌ Neural translation failed: {e}")
-            return "<NO OUTPUT>"
+            print(f"❌ Translation failed: {e}")
+            return "<TRANSLATION ERROR>", 0
+    
+    def translate_with_beam_search(self, english_sentence, beam_width=3, max_length=8):
+        """
+        Advanced translation with beam search for better results
+        """
+        print(f"\n🎯 Beam Search Translation: '{english_sentence}'")
+        
+        try:
+            # Preprocess input
+            cleaned = clean_text(english_sentence)
+            encoder_input = text_to_sequences(self.eng_tokenizer, [cleaned], max_len=self.max_length)
+            
+            # Initialize beam search
+            beams = [([self.SOS_TOKEN], 1.0)]  # (tokens, cumulative_prob)
+            
+            for step in range(max_length):
+                new_beams = []
+                
+                for tokens, cum_prob in beams:
+                    # Skip if sequence is complete
+                    if tokens and tokens[-1] == self.EOS_TOKEN:
+                        new_beams.append((tokens, cum_prob))
+                        continue
+                    
+                    # Prepare decoder input
+                    decoder_input = np.zeros((1, self.max_length))
+                    for i, token in enumerate(tokens):
+                        if i < self.max_length:
+                            decoder_input[0, i] = token
+                    
+                    # Get predictions
+                    predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
+                    step_probs = predictions[0, len(tokens) - 1, :]
+                    
+                    # Get top beam_width candidates
+                    top_tokens = np.argsort(step_probs)[-beam_width:][::-1]
+                    
+                    for token in top_tokens:
+                        prob = step_probs[token]
+                        word = self.reverse_gloss.get(token, '<UNK>')
+                        
+                        # Skip unwanted tokens
+                        if (word in ['<start>', '<pad>', '<unk>'] or
+                            word.startswith('DESC-') or word.startswith('X-')):
+                            continue
+                        
+                        new_tokens = tokens + [token]
+                        new_prob = cum_prob * prob
+                        
+                        new_beams.append((new_tokens, new_prob))
+                
+                # Keep top beam_width beams
+                beams = sorted(new_beams, key=lambda x: x[1], reverse=True)[:beam_width]
+                
+                # Stop if all beams end with EOS
+                if all(tokens[-1] == self.EOS_TOKEN for tokens, _ in beams):
+                    break
+            
+            # Convert best beam to text
+            best_tokens, best_prob = beams[0]
+            words = []
+            
+            for token in best_tokens:
+                word = self.reverse_gloss.get(token, '')
+                if word and word not in ['<start>', '<end>', '<pad>', '<unk>']:
+                    words.append(word)
+            
+            result = ' '.join(words) if words else "<NO VALID TRANSLATION>"
+            
+            print(f"🤖 Beam Search Result: {result}")
+            print(f"📊 Sequence Probability: {best_prob:.6f}")
+            
+            return result, best_prob
+            
+        except Exception as e:
+            print(f"❌ Beam search failed: {e}")
+            return "<BEAM SEARCH ERROR>", 0
     
     def interactive_translation(self):
-        """Interactive translation with fallback"""
+        """Interactive translation using only neural model"""
         print("\n" + "="*60)
-        print("💬 INTERACTIVE TRANSLATION (with fallback)")
+        print("💬 PURE NEURAL TRANSLATION")
         print("="*60)
-        print("Type 'quit' to exit, 'diagnose' to check model")
+        print("Type 'quit' to exit, 'analyze' to check model, 'beam' for beam search")
         
         while True:
             user_input = input("\n🌍 Enter English sentence: ").strip()
             
             if user_input.lower() in ['quit', 'exit', 'q']:
                 break
-            elif user_input.lower() == 'diagnose':
-                self.diagnose_model_issue()
+            elif user_input.lower() == 'analyze':
+                self.analyze_model_performance()
+                continue
+            elif user_input.lower() == 'beam':
+                sentence = input("Enter sentence for beam search: ").strip()
+                if sentence:
+                    self.translate_with_beam_search(sentence)
                 continue
             elif not user_input:
                 continue
             
-            translation = self.translate_with_fallback(user_input)
-            print(f"🖐️  ASL Gloss: {translation}")
+            # Try both standard and beam search
+            print("\n--- Standard Translation ---")
+            standard_result, std_conf = self.translate(user_input)
+            
+            print("\n--- Beam Search Translation ---")
+            beam_result, beam_prob = self.translate_with_beam_search(user_input)
+            
+            print(f"\n🎯 Final Results:")
+            print(f"Standard: {standard_result} (conf: {std_conf:.4f})")
+            print(f"Beam:     {beam_result} (prob: {beam_prob:.6f})")
     
-    def batch_translate(self, sentences):
-        """Translate multiple sentences"""
+    def batch_translate(self, sentences, use_beam_search=False):
+        """Translate multiple sentences using neural model only"""
         print("\n" + "="*60)
-        print("📝 BATCH TRANSLATION RESULTS")
+        print("📝 NEURAL BATCH TRANSLATION RESULTS")
         print("="*60)
         
         results = []
         for sentence in sentences:
-            translation = self.translate_with_fallback(sentence)
-            results.append((sentence, translation))
+            if use_beam_search:
+                translation, confidence = self.translate_with_beam_search(sentence)
+            else:
+                translation, confidence = self.translate(sentence)
+            
+            results.append((sentence, translation, confidence))
             print(f"English: {sentence}")
             print(f"ASL:     {translation}")
+            print(f"Conf:    {confidence:.4f}")
             print("-" * 40)
         
         return results
 
 def main():
-    """Main function to run everything"""
+    """Main function to run neural translation"""
     
     # Model path - adjust if needed
-    model_path = 'asl_translation_model.h5'
+    model_path = 'regularized_asl_model.h5'
     
     if not os.path.exists(model_path):
         print(f"❌ Model file not found: {model_path}")
@@ -274,10 +288,10 @@ def main():
     
     try:
         # Create translator
-        translator = FixedASLTranslator(model_path)
+        translator = NeuralASLTranslator(model_path)
         
-        # First, diagnose the issue
-        translator.diagnose_model_issue()
+        # First, analyze model performance
+        translator.analyze_model_performance()
         
         # Test sentences
         test_sentences = [
@@ -292,7 +306,15 @@ def main():
         ]
         
         # Run batch translation
-        translator.batch_translate(test_sentences)
+        print("\n" + "="*50)
+        print("STANDARD TRANSLATION")
+        print("="*50)
+        translator.batch_translate(test_sentences, use_beam_search=False)
+        
+        print("\n" + "="*50)
+        print("BEAM SEARCH TRANSLATION") 
+        print("="*50)
+        translator.batch_translate(test_sentences, use_beam_search=True)
         
         # Start interactive mode
         translator.interactive_translation()
