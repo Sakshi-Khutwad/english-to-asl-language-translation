@@ -1,5 +1,5 @@
 from pipeline import preprocessing_pipeline
-from model2 import build_seq2seq_model, train_model
+from model3 import build_seq2seq_model, train_model
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
