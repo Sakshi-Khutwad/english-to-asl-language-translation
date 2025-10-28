@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.models import load_model
-from pipeline import preprocessing_pipeline
 
 def load_trained_model(model_path, processed_data):
    
