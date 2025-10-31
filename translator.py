@@ -1,72 +1,59 @@
+import streamlit as st
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 import numpy as np
 import os
-
-# Add your existing imports here
+import time
 from text_processing import clean_text, text_to_sequences
 from pipeline import preprocessing_pipeline
 
-class NeuralASLTranslator:
+class StreamlitASLTranslator:
     def __init__(self, model_path):
+        st.write("Loading ASL Translation Model...")
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        status_text.text("Loading model...")
         self.model = load_model(model_path)
+        progress_bar.progress(30)
+
         self.processed_data = preprocessing_pipeline()
+        progress_bar.progress(60)
         
         self.eng_tokenizer = self.processed_data['eng_tokenizer']
         self.gloss_tokenizer = self.processed_data['gloss_tokenizer']
         self.max_length = self.processed_data['max_length']
         
-        
         self.SOS_TOKEN = self.gloss_tokenizer.word_index.get('<start>', 1)
         self.EOS_TOKEN = self.gloss_tokenizer.word_index.get('<end>', 2)
         self.UNK_TOKEN = self.gloss_tokenizer.word_index.get('<unk>', 0)
         
-        print(f"Loaded: SOS={self.SOS_TOKEN}, EOS={self.EOS_TOKEN}, MaxLen={self.max_length}")
-        print(f"Vocab sizes: Eng={len(self.eng_tokenizer.word_index)}, Gloss={len(self.gloss_tokenizer.word_index)}")
-        
         self.reverse_eng = {v: k for k, v in self.eng_tokenizer.word_index.items()}
         self.reverse_gloss = {v: k for k, v in self.gloss_tokenizer.word_index.items()}
-    
-    def analyze_model_performance(self):
         
-        train_encoder = self.processed_data['train_encoder_inputs'][:3]
-        train_decoder = self.processed_data['train_decoder_inputs'][:3]
-        train_targets = self.processed_data['train_decoder_targets'][:3]
+        progress_bar.progress(100)
+        status_text.text("Model loaded successfully!")
         
-        for i in range(3):
-            print(f"\nTraining Example {i}:")
+        st.success(f"**Model Info:** SOS={self.SOS_TOKEN}, EOS={self.EOS_TOKEN}, Max Length={self.max_length}")
+        st.info(f"**Vocabulary Sizes:** English={len(self.eng_tokenizer.word_index)}, Gloss={len(self.gloss_tokenizer.word_index)}")
+        
+        time.sleep(1)
+        progress_bar.empty()
+        status_text.empty()
+
+    def translate_with_visualization(self, english_sentence, max_output_length=15, min_confidence=0.05):
+        
+        st.write(f"### Translating: '{english_sentence}'")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            step_container = st.container()
+            progress_bar = st.progress(0)
             
-            eng_tokens = [self.reverse_eng.get(t, '?') for t in train_encoder[i] if t != 0]
-            gloss_tokens = [self.reverse_gloss.get(t, '?') for t in train_targets[i] if t != 0]
-            
-            print(f"  Input:  {' '.join(eng_tokens)}")
-            print(f"  Target: {' '.join(gloss_tokens)}")
-            
-            encoder_input = train_encoder[i:i+1]
-            decoder_input = train_decoder[i:i+1]
-            
-            predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
-            
-            pred_tokens = []
-            confidence_scores = []
-            
-            for step in range(min(8, predictions.shape[1])):
-                token = np.argmax(predictions[0, step, :])
-                prob = predictions[0, step, token]
-                word = self.reverse_gloss.get(token, f'?{token}?')
-                
-                if word not in ['<start>', '<end>', '<pad>']:
-                    pred_tokens.append(word)
-                    confidence_scores.append(prob)
-            
-            print(f"  Model prediction: {' '.join(pred_tokens)}")
-            print(f"  Confidence: {np.mean(confidence_scores):.4f}")
-    
-    def translate(self, english_sentence, max_output_length=10, min_confidence=0.1):
-        """
-        Pure neural translation without any rule-based fallback
-        """
-        print(f"\nTranslating: '{english_sentence}'")
+        with col2:
+            metrics_container = st.container()
         
         try:
             cleaned = clean_text(english_sentence)
@@ -77,18 +64,43 @@ class NeuralASLTranslator:
             
             predicted_tokens = []
             confidence_scores = []
+            step_predictions = []
             
             for step in range(min(max_output_length, self.max_length)):
+                progress = (step + 1) / min(max_output_length, self.max_length)
+                progress_bar.progress(progress)
+                
                 predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
                 current_probs = predictions[0, step, :]
                 
+                # Standard greedy search - just get the best token
                 top_token = np.argmax(current_probs)
                 top_prob = current_probs[top_token]
                 top_word = self.reverse_gloss.get(top_token, '<UNK>')
                 
-                if (top_token == self.EOS_TOKEN or 
-                    top_word in ['<end>', '<pad>'] or
-                    step >= max_output_length - 1):
+                step_info = {
+                    'step': step + 1,
+                    'chosen_word': top_word,
+                    'chosen_prob': top_prob
+                }
+                step_predictions.append(step_info)
+                
+                with step_container:
+                    with st.expander(f"Step {step + 1}: '{top_word}' (Confidence: {top_prob:.4f})", expanded=True):
+                        st.write(f"**Predicted:** {top_word}")
+                        st.write(f"**Confidence:** {top_prob:.4f}")
+                        st.write(f"**Token ID:** {top_token}")
+                
+                stop_conditions = [
+                    top_token == self.EOS_TOKEN,
+                    top_word in ['<end>', '<pad>'],
+                    step >= max_output_length - 1,
+                    top_prob < min_confidence and step > 0
+                ]
+                
+                if any(stop_conditions):
+                    if top_prob < min_confidence:
+                        st.warning(f"Stopping at step {step + 1} due to low confidence ({top_prob:.4f})")
                     break
                 
                 if (top_prob >= min_confidence and 
@@ -100,14 +112,10 @@ class NeuralASLTranslator:
                     predicted_tokens.append(top_token)
                     confidence_scores.append(top_prob)
                     
-                    print(f"  Step {step}: '{top_word}' (prob: {top_prob:.4f})")
-                    
                     if step + 1 < self.max_length:
                         decoder_input[0, step + 1] = top_token
-                
-                elif top_prob < min_confidence:
-                    print(f"  Step {step}: Low confidence ({top_prob:.4f}), stopping")
-                    break
+            
+            progress_bar.progress(1.0)
             
             words = []
             for token in predicted_tokens:
@@ -118,178 +126,173 @@ class NeuralASLTranslator:
             result = ' '.join(words) if words else "<NO CONFIDENT PREDICTION>"
             avg_confidence = np.mean(confidence_scores) if confidence_scores else 0
             
-            print(f"Neural Translation: {result}")
-            print(f"Average Confidence: {avg_confidence:.4f}")
+            with metrics_container:
+                st.metric("Average Confidence", f"{avg_confidence:.4f}")
+                st.metric("Words Generated", len(words))
+                st.metric("Translation Steps", len(step_predictions))
             
-            return result, avg_confidence
+            st.markdown("---")
+            if result != "<NO CONFIDENT PREDICTION>":
+                st.success(f"### Final ASL Translation: **{result}**")
+                st.info(f"**Confidence Score:** {avg_confidence:.4f}")
+            else:
+                st.error("### No confident translation generated")
+                st.warning("Try rephrasing your sentence or check if the words are in the vocabulary.")
             
-        except Exception as e:
-            print(f"Translation failed: {e}")
-            return "<TRANSLATION ERROR>", 0
-    
-    def translate_with_beam_search(self, english_sentence, beam_width=3, max_length=8):
-        """
-        Advanced translation with beam search for better results
-        """
-        print(f"\nBeam Search Translation: '{english_sentence}'")
-        
-        try:
-            # Preprocess input
-            cleaned = clean_text(english_sentence)
-            encoder_input = text_to_sequences(self.eng_tokenizer, [cleaned], max_len=self.max_length)
-            
-            # Initialize beam search
-            beams = [([self.SOS_TOKEN], 1.0)]  # (tokens, cumulative_prob)
-            
-            for step in range(max_length):
-                new_beams = []
-                
-                for tokens, cum_prob in beams:
-                    # Skip if sequence is complete
-                    if tokens and tokens[-1] == self.EOS_TOKEN:
-                        new_beams.append((tokens, cum_prob))
-                        continue
-                    
-                    # Prepare decoder input
-                    decoder_input = np.zeros((1, self.max_length))
-                    for i, token in enumerate(tokens):
-                        if i < self.max_length:
-                            decoder_input[0, i] = token
-                    
-                    # Get predictions
-                    predictions = self.model.predict([encoder_input, decoder_input], verbose=0)
-                    step_probs = predictions[0, len(tokens) - 1, :]
-                    
-                    # Get top beam_width candidates
-                    top_tokens = np.argsort(step_probs)[-beam_width:][::-1]
-                    
-                    for token in top_tokens:
-                        prob = step_probs[token]
-                        word = self.reverse_gloss.get(token, '<UNK>')
-                        
-                        # Skip unwanted tokens
-                        if (word in ['<start>', '<pad>', '<unk>'] or
-                            word.startswith('DESC-') or word.startswith('X-')):
-                            continue
-                        
-                        new_tokens = tokens + [token]
-                        new_prob = cum_prob * prob
-                        
-                        new_beams.append((new_tokens, new_prob))
-                
-                # Keep top beam_width beams
-                beams = sorted(new_beams, key=lambda x: x[1], reverse=True)[:beam_width]
-                
-                # Stop if all beams end with EOS
-                if all(tokens[-1] == self.EOS_TOKEN for tokens, _ in beams):
-                    break
-            
-            # Convert best beam to text
-            best_tokens, best_prob = beams[0]
-            words = []
-            
-            for token in best_tokens:
-                word = self.reverse_gloss.get(token, '')
-                if word and word not in ['<start>', '<end>', '<pad>', '<unk>']:
-                    words.append(word)
-            
-            result = ' '.join(words) if words else "<NO VALID TRANSLATION>"
-            
-            print(f"Beam Search Result: {result}")
-            print(f"Sequence Probability: {best_prob:.6f}")
-            
-            return result, best_prob
+            return result, avg_confidence, step_predictions
             
         except Exception as e:
-            print(f"Beam search failed: {e}")
-            return f"<BEAM SEARCH ERROR: {e}>", 0
-    
-    def interactive_translation(self):
-        print("PURE NEURAL TRANSLATION")
-        print("Type 'quit' to exit, 'analyze' to check model, 'beam' for beam search")
-        
-        while True:
-            user_input = input("\nEnter English sentence: ").strip()
-            
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                break
-            elif user_input.lower() == 'analyze':
-                self.analyze_model_performance()
-                continue
-            elif user_input.lower() == 'beam':
-                sentence = input("Enter sentence for beam search: ").strip()
-                if sentence:
-                    self.translate_with_beam_search(sentence)
-                continue
-            elif not user_input:
-                continue
-            
-            print("\n--- Standard Translation ---")
-            standard_result, std_conf = self.translate(user_input)
-            
-            print("\n--- Beam Search Translation ---")
-            beam_result, beam_prob = self.translate_with_beam_search(user_input)
-            
-            print(f"\nFinal Results:")
-            print(f"Standard: {standard_result} (conf: {std_conf:.4f})")
-            print(f"Beam:     {beam_result} (prob: {beam_prob:.6f})")
-    
-    def batch_translate(self, sentences, use_beam_search=False):
-        print("\nNEURAL BATCH TRANSLATION RESULTS")
+            st.error(f"### Translation failed: {str(e)}")
+            return "<TRANSLATION ERROR>", 0, []
+
+    def batch_translate(self, sentences, use_visualization=False):
+        st.write("### Batch Translation")
         
         results = []
-        for sentence in sentences:
-            if use_beam_search:
-                translation, confidence = self.translate_with_beam_search(sentence)
-            else:
-                translation, confidence = self.translate(sentence)
+        for i, sentence in enumerate(sentences):
+            st.write(f"**{i+1}. English:** {sentence}")
             
-            results.append((sentence, translation, confidence))
-            print(f"English: {sentence}")
-            print(f"ASL:     {translation}")
-            print(f"Conf:    {confidence:.4f}")
+            if use_visualization:
+                result, confidence, steps = self.translate_with_visualization(sentence)
+            else:
+                result, confidence, _ = self.translate_with_visualization(sentence)
+                st.write(f"**ASL:** {result} (Confidence: {confidence:.4f})")
+            
+            results.append((sentence, result, confidence))
+            st.write("---")
         
         return results
 
 def main():
+    st.set_page_config(
+        page_title="ASL Neural Translator",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    model_path = 'regularized_asl_model.h5'
+    st.markdown("""
+    <style>
+    .main-header {
+        font-size: 3rem;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #2e86ab;
+        margin-bottom: 1rem;
+    }
+    .translation-box {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 10px;
+        border-left: 5px solid #1f77b4;
+        margin: 1rem 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<h1 class="main-header">ASL Neural Translator</h1>', unsafe_allow_html=True)
+    st.markdown("---")
+    
+    with st.sidebar:
+        st.header("Settings")
+        model_path = st.text_input("Model Path", "best_regularized_model.h5")
+        max_output_length = st.slider("Max Output Length", 5, 20, 15)
+        min_confidence = st.slider("Minimum Confidence", 0.01, 0.3, 0.05, 0.01)
+        
+        st.header("Model Info")
+        if st.button("Show Model Summary"):
+            try:
+                model = load_model(model_path)
+                with st.expander("Model Architecture"):
+                    st.text("Model summary will be displayed here")
+            except:
+                st.error("Could not load model")
     
     if not os.path.exists(model_path):
-        print(f"Model file not found: {model_path}")
-        print("Please make sure the model file exists in the current directory.")
+        st.error(f"Model file not found: {model_path}")
+        st.info("Please make sure the model file exists in the current directory.")
         return
     
     try:
-        translator = NeuralASLTranslator(model_path)
+        translator = StreamlitASLTranslator(model_path)
         
-        translator.analyze_model_performance()
+        st.markdown('<h2 class="sub-header">Translation Modes</h2>', unsafe_allow_html=True)
         
-        test_sentences = [
-            "hello",
-            "thank you", 
-            "what is your name",
-            "where is bathroom",
-            "how are you",
-            "good morning",
-            "please help",
-            "sorry"
-        ]
+        tab1, tab2, tab3 = st.tabs(["Single Translation", "Batch Translation", "Quick Test"])
         
-        print("\nSTANDARD TRANSLATION")
-        translator.batch_translate(test_sentences, use_beam_search=False)
+        with tab1:
+            st.markdown("### Single Sentence Translation")
+            english_input = st.text_area(
+                "Enter English sentence to translate:",
+                placeholder="Type your English sentence here...",
+                height=100
+            )
+            
+            if st.button("Translate", key="single_translate"):
+                if english_input.strip():
+                    with st.spinner("Translating..."):
+                        result, confidence, steps = translator.translate_with_visualization(
+                            english_input, 
+                            max_output_length, 
+                            min_confidence
+                        )
+                else:
+                    st.warning("Please enter a sentence to translate.")
         
-        print("BEAM SEARCH TRANSLATION") 
-        translator.batch_translate(test_sentences, use_beam_search=True)
+        with tab2:
+            st.markdown("### Batch Translation")
+            batch_input = st.text_area(
+                "Enter multiple sentences (one per line):",
+                placeholder="hello\nthank you\nwhat is your name",
+                height=150
+            )
+            
+            show_viz = st.checkbox("Show step-by-step visualization", value=False)
+            
+            if st.button("Translate Batch", key="batch_translate"):
+                if batch_input.strip():
+                    sentences = [s.strip() for s in batch_input.split('\n') if s.strip()]
+                    with st.spinner(f"Translating {len(sentences)} sentences..."):
+                        results = translator.batch_translate(sentences, show_viz)
+                else:
+                    st.warning("Please enter some sentences to translate.")
         
-        translator.interactive_translation()
+        with tab3:
+            st.markdown("### Quick Test Sentences")
+            test_sentences = [
+                "hello",
+                "thank you", 
+                "what is your name",
+                "where is bathroom",
+                "how are you",
+                "good morning",
+                "please help",
+                "sorry"
+            ]
+            
+            cols = st.columns(2)
+            for i, sentence in enumerate(test_sentences):
+                with cols[i % 2]:
+                    if st.button(f"Translate: '{sentence}'", key=f"test_{i}"):
+                        with st.spinner(f"Translating '{sentence}'..."):
+                            result, confidence, steps = translator.translate_with_visualization(
+                                sentence, 
+                                max_output_length, 
+                                min_confidence
+                            )
     
     except Exception as e:
-        print(f"Failed to initialize translator: {e}")
-        print("Please check:")
-        print("1. Model file exists and is valid")
-        print("2. All required packages are installed")
-        print("3. Preprocessing pipeline works correctly")
+        st.error(f"Failed to initialize translator: {str(e)}")
+        st.info("""
+        **Please check:**
+        1. Model file exists and is valid
+        2. All required packages are installed  
+        3. Preprocessing pipeline works correctly
+        4. TensorFlow version is compatible
+        """)
 
 if __name__ == "__main__":
     main()

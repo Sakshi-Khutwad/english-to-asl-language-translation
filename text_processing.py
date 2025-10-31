@@ -3,37 +3,33 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 def clean_text(text):
-    """Enhanced cleaning for ASL gloss notation"""
     text = text.lower()
     
-    # Preserve special ASL markers but normalize them
-    text = re.sub(r'desc-', 'desc_', text)  # Replace hyphen with underscore
-    text = re.sub(r'x-', 'x_', text)        # Replace hyphen with underscore
+    text = re.sub(r'desc-', 'desc_', text)  
+    text = re.sub(r'x-', 'x_', text)        
     
-    # Clean the rest
-    text = re.sub(r'[^a-zA-Z0-9\s\?\.\!_]', '', text)  # Allow underscores
+    text = re.sub(r'[^a-zA-Z0-9\s\?\.\!_]', '', text) 
     text = re.sub(r'\s+', ' ', text).strip()
     
     return text
 
 def normalize_asl_gloss(text):
-    """Normalize ASL-specific notations"""
-    # Standardize DESC and X markers
-    text = re.sub(r'\bdesc[_-]', 'desc_', text)
-    text = re.sub(r'\bx[_-]', 'x_', text)
+
+    text = str(text).upper()
+
+    text = re.sub(r'\bDESC[_-]', 'DESC_', text)
+    text = re.sub(r'\bX[_-]', 'X_', text)
     
-    # Handle common variations
-    text = re.sub(r'\bdesc\b', 'desc_', text)  # Standalone 'desc'
-    text = re.sub(r'\bx\b', 'x_', text)        # Standalone 'x'
+    text = re.sub(r'\bDESC\b', 'DESC_', text)
+    text = re.sub(r'\bX\b', 'X_', text)
     
     return text
 
 def tokenize_text(texts, lower=True):
-    """Enhanced tokenizer for ASL glosses"""
     tokenizer = Tokenizer(
         num_words=10000,
         oov_token='<UNK>',
-        filters='!"#$%&()*+,-./:;<=>?@[\\]^`{|}~\t\n',  # Keep underscores
+        filters='!"#$%&()*+,-./:;<=>?@[\\]^`{|}~\t\n', 
         lower=lower,
         split=' '
     )
@@ -55,7 +51,6 @@ def build_vocabulary(tokenizer):
     return word_index, index_word, vocab_size
 
 def analyze_token_distribution(tokenizer, texts):
-    """Analyze how well DESC and X tokens are learned"""
     desc_count = 0
     x_count = 0
     total_tokens = 0
@@ -64,7 +59,7 @@ def analyze_token_distribution(tokenizer, texts):
     
     for seq in sequences:
         for token_id in seq:
-            if token_id == 0:  # padding
+            if token_id == 0:
                 continue
             word = tokenizer.index_word.get(token_id, '')
             if word.startswith('desc_'):
@@ -72,16 +67,9 @@ def analyze_token_distribution(tokenizer, texts):
             elif word.startswith('x_'):
                 x_count += 1
             total_tokens += 1
-    
-    print(f"📊 Token Distribution Analysis:")
-    print(f"   DESC_ tokens: {desc_count} ({desc_count/max(total_tokens,1)*100:.1f}%)")
-    print(f"   X_ tokens: {x_count} ({x_count/max(total_tokens,1)*100:.1f}%)")
-    print(f"   Total tokens: {total_tokens}")
 
 def preprocess_asl_data(english_texts, gloss_texts):
-    """Complete preprocessing pipeline for ASL data"""
     
-    # Clean and normalize
     cleaned_english = [clean_text(text) for text in english_texts]
     cleaned_gloss = [normalize_asl_gloss(clean_text(text)) for text in gloss_texts]
     
